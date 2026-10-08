@@ -76,6 +76,19 @@ export const MIGRATIONS: Migration[] = [
         ('common-words', 'words', 'the be to of and a in that have for not on with you do at this but his by from they we say', '["t","h","e","a","o","n","r","i","s","d","l","c","u","m"]')`,
     ],
   },
+  {
+    version: 3,
+    name: 'coach-lessons-and-profile',
+    sql: [
+      `INSERT OR IGNORE INTO user_profile (id, level, layout, daily_minutes) VALUES (1, 'beginner', 'qwerty', 10)`,
+      `INSERT OR IGNORE INTO lessons (id, category, content, target_keys) VALUES
+        ('punctuation', 'punctuation', 'wait, what? really! all fine; ok (yes) [done] 50% sure, 100% done: stop. go, run, jump - now!', '[".", ",", "?", "!", ";", "(", ")", "[", "]", "%", ":", "-"]'),
+        ('numbers', 'numbers', '12345 67890 11223 34455 3.14 42 100 50% 25 75 9:15 6/7/8 2026 80 90', '["0","1","2","3","4","5","6","7","8","9"]'),
+        ('drills', 'drills', 'the and ing her ere tion ment want call each work first like time good made very more long much place still every night end great mind behind send hand hard word kind', '["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]'),
+        ('passage-lighthouse', 'passages', 'the beacon turns once every hour, sweeping the dark water with a slow white arm. boats keep their distance and the gulls never settle on the tower.', '["a","b","c","d","e","f","g","h","i","k","l","m","n","o","p","r","s","t","u","w","y"]'),
+        ('passage-hands', 'passages', 'keep your wrists level and your eyes on the line. speed arrives later, on its own, when the hands stop thinking about the keys.', '["a","b","c","d","e","f","g","h","i","k","l","m","n","o","p","r","s","t","u","v","w","x","y"]')`,
+    ],
+  },
 ]
 
 export function migrate(db: Database.Database, migrations: Migration[]): void {

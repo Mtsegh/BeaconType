@@ -10,6 +10,7 @@ const btAPI: BTAPI = {
   listLessons: () => ipcRenderer.invoke(IPC.listLessons),
   saveSession: (input) => ipcRenderer.invoke(IPC.saveSession, input),
   getKeyStats: () => ipcRenderer.invoke(IPC.getKeyStats),
+  getCoach: () => ipcRenderer.invoke(IPC.getCoach),
   getSettings: () => ipcRenderer.invoke(IPC.getSettings),
   setSetting: (input) => ipcRenderer.invoke(IPC.setSetting, input),
 }

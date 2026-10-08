@@ -4,3 +4,4 @@
 export * from './types'
 export * from './input'
 export * from './perKey'
+export * from './coach'

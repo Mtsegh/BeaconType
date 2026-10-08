@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { computeMetrics, inferKeystroke } from '@/engine'
+import { computeMetrics, inferKeystroke, shouldSuggestSlowDown } from '@/engine'
 import type { ErrorMode, TypingEvent } from '@/engine'
 import type { LessonRow } from '../../electron/shared/api'
 import type { SessionResult } from '@/lib/session'
@@ -22,8 +22,10 @@ interface PlayerState {
 export function LessonPlayer({ lesson, mode, onComplete }: LessonPlayerProps) {
   const passage = lesson.content
   const [progress, setProgress] = useState(0)
+  const [showSlowDown, setShowSlowDown] = useState(false)
   const refs = useRef(new Map<number, HTMLSpanElement>())
   const state = useRef<PlayerState>({ idx: 0, events: [], startedAt: 0, done: false })
+  const slowDownRef = useRef(false)
 
   const register = useCallback((index: number, el: HTMLSpanElement | null) => {
     if (el) refs.current.set(index, el)
@@ -36,6 +38,8 @@ export function LessonPlayer({ lesson, mode, onComplete }: LessonPlayerProps) {
     s.events = []
     s.startedAt = performance.now()
     s.done = false
+    slowDownRef.current = false
+    setShowSlowDown(false)
     refs.current.get(0)?.classList.add('char-current')
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -66,6 +70,14 @@ export function LessonPlayer({ lesson, mode, onComplete }: LessonPlayerProps) {
       refs.current.get(next)?.classList.add('char-current')
       s.idx = next
       setProgress(next)
+
+      // State only flips when the suggestion actually changes, so the
+      // per-keystroke path stays allocation-free.
+      const slow = shouldSuggestSlowDown(s.events)
+      if (slow !== slowDownRef.current) {
+        slowDownRef.current = slow
+        setShowSlowDown(slow)
+      }
 
       if (next >= passage.length) {
         s.done = true
@@ -100,6 +112,13 @@ export function LessonPlayer({ lesson, mode, onComplete }: LessonPlayerProps) {
       </div>
 
       <div className="mt-auto">
+        <p
+          role="status"
+          aria-live="polite"
+          className="mb-3 min-h-6 text-sm font-medium text-[var(--warn)]"
+        >
+          {showSlowDown && 'Ease up — let accuracy recover before pushing speed.'}
+        </p>
         <VirtualKeyboard />
       </div>
     </div>

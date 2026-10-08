@@ -56,6 +56,32 @@ export interface LessonRow {
   targetKeys: string[]
 }
 
+export interface SessionSummary {
+  id: number
+  startedAt: number
+  lessonId: string
+  netWpm: number
+  accuracy: number
+  durationMs: number
+}
+
+export interface RecentKeyError {
+  key: string
+  attempts: number
+  errors: number
+  /** 0 = newest session, 1 = the one before, ... */
+  age: number
+}
+
+export interface CoachData {
+  keyStats: KeyStatRow[]
+  userMedianIntervalMs: number | null
+  sessions: SessionSummary[]
+  recentKeyErrors: RecentKeyError[]
+  dailyGoalMinutes: number
+  todayPracticeMs: number
+}
+
 export interface HealthInfo {
   dbPath: string
   schemaVersion: number
@@ -71,6 +97,7 @@ export const IPC = {
   listLessons: 'bt:list-lessons',
   saveSession: 'bt:save-session',
   getKeyStats: 'bt:get-key-stats',
+  getCoach: 'bt:get-coach',
   getSettings: 'bt:get-settings',
   setSetting: 'bt:set-setting',
 } as const
@@ -80,6 +107,7 @@ export interface BTAPI {
   listLessons(): Promise<LessonRow[]>
   saveSession(input: SaveSessionInput): Promise<SaveSessionResult>
   getKeyStats(): Promise<KeyStatRow[]>
+  getCoach(): Promise<CoachData>
   getSettings(): Promise<SettingRow[]>
   setSetting(input: SettingsInput): Promise<SettingRow>
 }

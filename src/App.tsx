@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { LessonSelect } from '@/components/LessonSelect'
 import { LessonPlayer } from '@/components/LessonPlayer'
 import { ResultsScreen } from '@/components/ResultsScreen'
+import { recommendNext } from '@/lib/coach'
 import { toPerKey, toSaveInput } from '@/lib/session'
+import type { NextMission } from '@/lib/coach'
 import type { SessionResult } from '@/lib/session'
-import type { HealthInfo, LessonRow } from '../electron/shared/api'
+import type { CoachData, HealthInfo, LessonRow } from '../electron/shared/api'
 import type { ErrorMode } from '@/engine'
 
 type Screen =
@@ -19,16 +21,19 @@ const ERROR_MODE: ErrorMode = 'continue'
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'loading' })
   const [lessons, setLessons] = useState<LessonRow[]>([])
+  const [coach, setCoach] = useState<CoachData | null>(null)
   const [health, setHealth] = useState<HealthInfo | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'error'>('saving')
+  const [nextMission, setNextMission] = useState<NextMission | null>(null)
 
   useEffect(() => {
     let active = true
-    Promise.all([window.btAPI.listLessons(), window.btAPI.health()])
-      .then(([lessonRows, info]) => {
+    Promise.all([window.btAPI.listLessons(), window.btAPI.health(), window.btAPI.getCoach()])
+      .then(([lessonRows, info, coachData]) => {
         if (!active) return
         setLessons(lessonRows)
         setHealth(info)
+        setCoach(coachData)
         setScreen({ name: 'select' })
       })
       .catch((err: unknown) => {
@@ -39,17 +44,25 @@ export default function App() {
     }
   }, [])
 
-  const finish = useCallback(async (result: SessionResult) => {
-    result.perKey = toPerKey(result.events)
-    setScreen({ name: 'results', result })
-    setSaveStatus('saving')
-    try {
-      await window.btAPI.saveSession(toSaveInput(result))
-      setSaveStatus('saved')
-    } catch {
-      setSaveStatus('error')
-    }
-  }, [])
+  const finish = useCallback(
+    async (result: SessionResult) => {
+      result.perKey = toPerKey(result.events)
+      setScreen({ name: 'results', result })
+      setSaveStatus('saving')
+      setNextMission(null)
+      try {
+        await window.btAPI.saveSession(toSaveInput(result))
+        setSaveStatus('saved')
+        // Fresh stats change the recommendation, so reload the coach data.
+        const fresh = await window.btAPI.getCoach()
+        setCoach(fresh)
+        setNextMission(recommendNext(lessons, fresh, result.lessonId))
+      } catch {
+        setSaveStatus('error')
+      }
+    },
+    [lessons],
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -69,11 +82,8 @@ export default function App() {
           </div>
         )}
 
-        {screen.name === 'select' && (
-          <LessonSelect
-            lessons={lessons}
-            onSelect={(lesson) => setScreen({ name: 'lesson', lesson })}
-          />
+        {screen.name === 'select' && coach && (
+          <LessonSelect lessons={lessons} coach={coach} onSelect={(lesson) => setScreen({ name: 'lesson', lesson })} />
         )}
 
         {screen.name === 'lesson' && (
@@ -90,7 +100,13 @@ export default function App() {
         )}
 
         {screen.name === 'results' && (
-          <ResultsScreen result={screen.result} saveStatus={saveStatus} onDone={() => setScreen({ name: 'select' })} />
+          <ResultsScreen
+            result={screen.result}
+            saveStatus={saveStatus}
+            next={nextMission}
+            onDone={() => setScreen({ name: 'select' })}
+            onStartNext={(lesson) => setScreen({ name: 'lesson', lesson })}
+          />
         )}
       </main>
 

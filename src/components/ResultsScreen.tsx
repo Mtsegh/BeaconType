@@ -1,13 +1,17 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { SessionResult } from '@/lib/session'
+import type { NextMission } from '@/lib/coach'
+import type { LessonRow } from '../../electron/shared/api'
 
 interface ResultsScreenProps {
   result: SessionResult
   saveStatus: 'saving' | 'saved' | 'error'
+  next: NextMission | null
   onDone: () => void
+  onStartNext: (lesson: LessonRow) => void
 }
 
-export function ResultsScreen({ result, saveStatus, onDone }: ResultsScreenProps) {
+export function ResultsScreen({ result, saveStatus, next, onDone, onStartNext }: ResultsScreenProps) {
   const m = result.metrics
   const chartData = result.perKey
     .filter((k) => k.attempts > 0)
@@ -70,6 +74,21 @@ export function ResultsScreen({ result, saveStatus, onDone }: ResultsScreenProps
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {next && (
+        <section className="rounded-xl bg-[var(--surface)] p-5 ring-1 ring-[var(--accent)]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">Next mission</p>
+          <h2 className="mt-1 text-lg font-bold">{next.lesson.id}</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">{next.reason}.</p>
+          <button
+            type="button"
+            onClick={() => onStartNext(next.lesson)}
+            className="mt-4 rounded-lg bg-[var(--accent-strong)] px-5 py-2.5 text-sm font-semibold text-[var(--bg)] transition-colors hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+          >
+            Start next lesson
+          </button>
+        </section>
+      )}
 
       <div className="mt-auto">
         <button

@@ -30,7 +30,9 @@ export function toSaveInput(result: SessionResult): SaveSessionInput {
     lessonId: result.lessonId,
     mode: result.mode,
     formulaVersion: m.formulaVersion,
-    startedAt: result.startedAt,
+    // Wall-clock start derived from duration; the in-memory startedAt is a
+    // performance.now() stamp and cannot be grouped by calendar day.
+    startedAt: Date.now() - m.durationMs,
     durationMs: m.durationMs,
     rawWpm: m.rawWpm,
     netWpm: m.netWpm,
