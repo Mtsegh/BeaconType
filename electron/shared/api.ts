@@ -87,6 +87,24 @@ export interface HealthInfo {
   schemaVersion: number
 }
 
+export interface MlLogInput {
+  sessionId: number
+  ruleLessonId: string
+  modelLessonId: string | null
+  modelPickP: number | null
+  modelRuleP: number | null
+  modelVersion: number
+}
+
+export interface ShadowLogRow {
+  sessionId: number
+  ruleLessonId: string
+  modelLessonId: string | null
+  modelPickP: number | null
+  modelRuleP: number | null
+  modelVersion: number
+}
+
 export interface SaveSessionResult {
   sessionId: number
   insertedEvents: number
@@ -100,6 +118,8 @@ export const IPC = {
   getCoach: 'bt:get-coach',
   getSettings: 'bt:get-settings',
   setSetting: 'bt:set-setting',
+  logShadow: 'bt:log-shadow',
+  getMlLog: 'bt:get-ml-log',
 } as const
 
 export interface BTAPI {
@@ -110,4 +130,6 @@ export interface BTAPI {
   getCoach(): Promise<CoachData>
   getSettings(): Promise<SettingRow[]>
   setSetting(input: SettingsInput): Promise<SettingRow>
+  logShadow(input: MlLogInput): Promise<void>
+  getMlLog(): Promise<ShadowLogRow[]>
 }

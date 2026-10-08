@@ -1,21 +1,23 @@
 import { useState } from 'react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { computeWeakness, recommend } from '@/engine'
+import { ML_CONFIG, computeWeakness, recommend } from '@/engine'
 import { deriveAchievements } from '@/lib/achievements'
 import { toSnapshot } from '@/lib/coach'
+import { analyzeShadow, driverChoice, evaluateLog } from '@/lib/shadow'
 import type { UISettings } from '@/lib/settings'
-import type { CoachData, LessonRow } from '../../electron/shared/api'
+import type { CoachData, LessonRow, ShadowLogRow } from '../../electron/shared/api'
 import { SettingsPanel } from './SettingsPanel'
 
 interface LessonSelectProps {
   lessons: LessonRow[]
   coach: CoachData
   settings: UISettings
+  mlLog: ShadowLogRow[]
   onSelect: (lesson: LessonRow) => void
   onUpdateSetting: (patch: Partial<UISettings>) => void
 }
 
-export function LessonSelect({ lessons, coach, settings, onSelect, onUpdateSetting }: LessonSelectProps) {
+export function LessonSelect({ lessons, coach, settings, mlLog, onSelect, onUpdateSetting }: LessonSelectProps) {
   const [showSettings, setShowSettings] = useState(false)
   const snapshot = toSnapshot(coach)
   const recommendation = recommend(lessons, snapshot)
@@ -26,6 +28,29 @@ export function LessonSelect({ lessons, coach, settings, onSelect, onUpdateSetti
   )
   const weakKeys = weaknesses.filter((w) => !w.mastered && w.attempts > 0 && w.weakness > 0).slice(0, 6)
   const masteredCount = weaknesses.filter((w) => w.mastered).length
+
+  const analysis = analyzeShadow(lessons, coach)
+  const evaluation = evaluateLog(mlLog, coach)
+  const choice = recommendation
+    ? driverChoice({
+        analysis,
+        lessons,
+        rulePick: recommendation.lesson,
+        adaptiveOn: settings.adaptiveCoach,
+      })
+    : null
+  const driver = choice?.driver ?? 'rules'
+  const modelPick = choice?.modelPick ?? null
+  const shownLesson =
+    driver === 'model' && modelPick
+      ? lessons.find((l) => l.id === modelPick.lessonId) ?? recommendation?.lesson ?? null
+      : recommendation?.lesson ?? null
+  const whyText =
+    driver === 'model' && modelPick
+      ? `the model expects ${Math.round(modelPick.p * 100)}% odds the next session hits ${Math.round(ML_CONFIG.accuracyTarget * 100)}% accuracy${
+          choice?.ruleP != null ? ` (rule pick: ${Math.round(choice.ruleP * 100)}%)` : ''
+        }`
+      : recommendation?.reason ?? null
 
   const doneMinutes = coach.todayPracticeMs / 60_000
   const goalMinutes = coach.dailyGoalMinutes
@@ -68,22 +93,27 @@ export function LessonSelect({ lessons, coach, settings, onSelect, onUpdateSetti
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
-          {recommendation && (
+          {recommendation && shownLesson && (
             <section className="rounded-xl bg-[var(--surface)] p-5 ring-1 ring-[var(--accent)]">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                Recommended next
+                {driver === 'model' ? 'Adaptive pick' : 'Recommended next'}
               </p>
-              <h2 className="mt-1 text-lg font-bold">{recommendation.lesson.id}</h2>
+              <h2 className="mt-1 text-lg font-bold">{shownLesson.id}</h2>
               <p className="text-xs uppercase tracking-wide text-[var(--muted)]">
-                {recommendation.lesson.category}
+                {shownLesson.category}
               </p>
               <p className="mt-2 text-sm">
                 <span className="font-semibold">Why this lesson?</span>{' '}
-                <span className="text-[var(--muted)]">{recommendation.reason}.</span>
+                <span className="text-[var(--muted)]">{whyText}.</span>
               </p>
+              {driver === 'model' && (
+                <p className="mt-1 text-xs text-[var(--accent)]">
+                  Steered by the local model (rules stay the fallback).
+                </p>
+              )}
               <button
                 type="button"
-                onClick={() => onSelect(recommendation.lesson)}
+                onClick={() => onSelect(shownLesson)}
                 className="mt-4 rounded-lg bg-[var(--accent-strong)] px-5 py-2.5 text-sm font-semibold text-[var(--bg)] transition-colors hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
               >
                 Start recommended lesson
@@ -110,6 +140,82 @@ export function LessonSelect({ lessons, coach, settings, onSelect, onUpdateSetti
               </button>
             ))}
           </div>
+
+          <section
+            aria-label="Adaptive coach (shadow)"
+            className="rounded-xl bg-[var(--surface)] p-5 ring-1 ring-[var(--border)]"
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-sm font-semibold">Adaptive coach (shadow)</h2>
+              <span className="text-[0.65rem] uppercase tracking-wide text-[var(--muted)]">
+                {settings.adaptiveCoach ? 'steering enabled' : 'shadow only'}
+              </span>
+            </div>
+
+            {!analysis.model ? (
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Collecting data — {analysis.examples} of {ML_CONFIG.minExamples} training examples
+                needed before the model trains. Rules stay in charge.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Model trained locally on {analysis.examples} example{analysis.examples === 1 ? '' : 's'}.
+                {evaluation.agreementRate != null
+                  ? ` It agreed with the rule engine on ${Math.round(evaluation.agreementRate * 100)}% of logged picks.`
+                  : ' No comparisons logged yet.'}
+                {evaluation.brier != null &&
+                  ` Calibration (Brier): ${evaluation.brier.toFixed(3)} over ${evaluation.withOutcome} outcome${
+                    evaluation.withOutcome === 1 ? '' : 's'
+                  }.`}
+              </p>
+            )}
+
+            {evaluation.rows.length > 0 ? (
+              <ul className="mt-3 flex flex-col gap-1 text-xs">
+                {evaluation.rows.slice(0, 5).map((r) => (
+                  <li key={r.sessionId} className="flex flex-wrap gap-x-3 text-[var(--muted)]">
+                    <span className="font-mono">#{r.sessionId}</span>
+                    <span>
+                      rules → <span className="text-[var(--text)]">{r.ruleLessonId}</span>
+                    </span>
+                    <span>
+                      model →{' '}
+                      <span className="text-[var(--text)]">{r.modelLessonId ?? '—'}</span>
+                      {r.modelRuleP != null && ` (p=${r.modelRuleP.toFixed(2)})`}
+                    </span>
+                    <span>
+                      next:{' '}
+                      <span
+                        className={
+                          r.outcome === true
+                            ? 'text-[var(--ok)]'
+                            : r.outcome === false
+                              ? 'text-[var(--danger)]'
+                              : ''
+                        }
+                      >
+                        {r.outcome === true
+                          ? 'target met'
+                          : r.outcome === false
+                            ? 'target missed'
+                            : 'pending'}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-xs text-[var(--muted)]">
+                No shadow entries yet — one appears after each saved session.
+              </p>
+            )}
+
+            <p className="mt-3 text-[0.65rem] text-[var(--muted)]">
+              Outcome = whether the following session hit {Math.round(ML_CONFIG.accuracyTarget * 100)}%
+              accuracy. The model only steers lessons when Adaptive Coach is on and its pick is clearly
+              safer; rules remain the fallback.
+            </p>
+          </section>
         </div>
 
         <aside className="flex flex-col gap-6">

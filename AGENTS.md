@@ -3,7 +3,7 @@
 ## Repo status
 
 - The single source of truth for *what* to build is `ProjectDescription.md` — read it fully before writing code.
-- The scaffold has landed: Electron + Vite (`vite-plugin-electron`) + React + TypeScript + Tailwind v4 + `better-sqlite3`. Phase 0 (packaged skeleton), Phase 1 (engine + one lesson + results), Phase 2 (rule-based adaptive coach, lesson categories, progress/daily goal) and Phase 3 (experience layer: onboarding + diagnostic, settings, beacon, finger guide, keyboard modes, sounds, achievements, constellation) are implemented and verified.
+- The scaffold has landed: Electron + Vite (`vite-plugin-electron`) + React + TypeScript + Tailwind v4 + `better-sqlite3`. Phase 0 (packaged skeleton), Phase 1 (engine + one lesson + results), Phase 2 (rule-based adaptive coach, lesson categories, progress/daily goal), Phase 3 (experience layer: onboarding + diagnostic, settings, beacon, finger guide, keyboard modes, sounds, achievements, constellation) and Phase 4 (ML shadow mode: local logistic regression, shadow logging, adaptive-coach toggle) are implemented and verified.
 - Package manager: **npm only** (no pnpm/yarn). `package-lock.json` is committed.
 
 ## Verified commands (run in this order before any commit)
@@ -11,19 +11,19 @@
 ```sh
 npm run typecheck   # tsc --noEmit for both tsconfig.json (web) and tsconfig.node.json (electron/configs)
 npm run lint        # eslint electron src --max-warnings 0 (use `npx eslint .` for repo-wide, e2e included)
-npm test            # vitest run (58 tests: 13 metrics/input + 21 coach + 24 lib: fingers/settings/achievements)
+npm test            # vitest run (80 tests: 13 metrics/input + 21 coach + 24 lib + 22 ml)
 npx playwright test # e2e smoke (needs `npm run pretest` first if dist-electron is stale)
 npm run build       # vite build + electron-builder NSIS installer -> release/0.1.0/
 ```
 
-All five were green as of the Phase 3 gate (2026-10-08). The packaged gate:
+All five were green as of the Phase 4 gate (2026-10-08). The packaged gate:
 launch `release/0.1.0/win-unpacked/Beacon Type.exe` (it must stay alive — that
 proves `better-sqlite3` loads), then run `node test/check-packaged-db.cjs` and
-confirm `%APPDATA%\Beacon Type\beacontype.db` reaches `schema_migrations` v4
+confirm `%APPDATA%\Beacon Type\beacontype.db` reaches `schema_migrations` v5
 (`initial-schema`, `seed-lessons`, `coach-lessons-and-profile`,
-`diagnostic-lesson`) with 10 lessons including `diagnostic`. An existing v3
-database must upgrade in place. The e2e DB (`%APPDATA%\Electron\beacontype.db`)
-migrated v3→v4 in place too.
+`diagnostic-lesson`, `ml-shadow-log`) with 10 lessons including `diagnostic`
+and the `ml_shadow_log` table present. An existing v4 database must upgrade in
+place. The e2e DB (`%APPDATA%\Electron\beacontype.db`) migrates in place too.
 
 ## Locked decisions (do not re-litigate)
 
@@ -47,7 +47,7 @@ migrated v3→v4 in place too.
 - **`sessions.started_at` is wall-clock epoch ms** (`Date.now() - durationMs` at save). The in-memory `startedAt` is a `performance.now()` stamp — never store it directly (Phase 1 did; those legacy rows just never count as "today").
 - **Performance rule:** never re-render the full passage per keystroke — `LessonPlayer` updates char DOM imperatively via refs. Input latency is the one thing a typing app cannot get wrong. State changes (slow-down hint, progress counter) must only fire when a value actually changes.
 - **Adaptive coach weights** live in one config object — see the coach bullet above.
-- **UI settings are plain `settings` rows** (`ui.sound`, `ui.voice`, `ui.reducedMotion`, `ui.keyboardMode`, `ui.fontSize`, `ui.onboarded`) parsed defensively by `loadSettings()` in `src/lib/settings.ts` — unknown/garbage values fall back to defaults, never crash a screen. `App.tsx` mirrors settings into `html[data-font]` and `html[data-motion='reduced']` (CSS-wide font sizing and motion flattening). Do not pass reduced-motion/font-size as props — the root attributes own them.
+- **UI settings are plain `settings` rows** (`ui.sound`, `ui.voice`, `ui.reducedMotion`, `ui.keyboardMode`, `ui.fontSize`, `ui.adaptiveCoach`, `ui.onboarded`) parsed defensively by `loadSettings()` in `src/lib/settings.ts` — unknown/garbage values fall back to defaults, never crash a screen. `App.tsx` mirrors settings into `html[data-font]` and `html[data-motion='reduced']` (CSS-wide font sizing and motion flattening). Do not pass reduced-motion/font-size as props — the root attributes own them.
 - **Onboarding gate:** a fresh account (no `ui.onboarded` flag AND zero sessions) shows `Onboarding.tsx`; any existing session counts as onboarded for pre-flag upgrades. The diagnostic lesson (`diagnostic`, migration v4) is a normal lesson row.
 - **Beacon (`BeaconOrb`) is ambient only:** state (`idle`/`well`/`error`) flips exclusively on threshold crossings via the no-op-guarded setter (650 ms error hold) — never setState per keystroke. It must never be the sole error signal (errors also get the wavy underline + status line).
 - **Keyboard modes** (settings `keyboardMode`): `always` / `fade` (dims after 6 s) / `no-peek` (keyboard not rendered). The `HandGuide` stays visible in *all* modes and shows the **finger, not the key position** — that is why it stays useful in no-peek mode. Expected-key outline and pressed-key highlight both use physical `event.code`-style codes (`codeForChar()` in `src/lib/fingers.ts`, unit-tested).
@@ -55,12 +55,12 @@ migrated v3→v4 in place too.
 - **Achievements and constellation are derived, never persisted** (`src/lib/achievements.ts`, `Constellation.tsx` uses `computeWeakness`) — they cannot drift from the data or be lost. Constellation layout is a deterministic golden-angle spiral over a–z.
 - **Migration v4 added the `diagnostic` lesson** (10 lessons total, `INSERT OR IGNORE`). Keep `target_keys` honest — list only characters that actually appear in the content.
 - **e2e handles the onboarding branch** (fresh DB → "Skip for now"); to re-test that path, move `%APPDATA%\Electron\beacontype.db` (plus `-wal`/`-shm`) aside for one run, then restore.
-- ML model stays shadow-mode and optional; rules remain the fallback.
+- **ML model (Phase 4) stays shadow-mode; rules remain the fallback.** The engine lives in `src/engine/ml.ts` (pure TS, same purity rules as the coach engine; `ML_CONFIG` holds every tunable: target accuracy 0.95, min 10 examples, target success 0.75, acceptance/margin gates, 600 epochs). Training examples come from *consecutive session pairs* (features of session i predict whether session i+1 hit the accuracy target — never a session predicting itself). `trainModel` is deterministic full-batch logistic regression with z-score normalization and returns `null` below the minimum sample count. Renderer glue is `src/lib/shadow.ts`; `App.finish()` writes one `ml_shadow_log` row per saved session (best-effort — failures never surface as save failures) via `logShadow`, and the LessonSelect "Adaptive coach (shadow)" section renders the comparison (agreement, Brier, last 5 rows, pending outcomes). The `ui.adaptiveCoach` toggle (default **false**) only lets the model steer the Recommended card when `resolveDriver` says the model's pick is clearly safer (`p ≥ 0.7` and `≥ 0.05` above the rule pick's prediction); the chosen lesson id, its `p`, and the rule pick's `p` are what get logged, and the *outcome* is always resolved at read time from the following session. Do not persist model weights or derived outcomes — both are rebuildable from sessions + log rows.
 
 ## Environment gotchas (this machine)
 
 - **Port 5173 may be taken** by another project's dev server; Vite then binds 5174. When verifying dev-mode behavior, confirm the port from the `npm run dev` output — probing 5173 can hit a foreign app.
-- **electron-builder can fail with `EPERM` renaming `win-unpacked.tmp` → `win-unpacked`** (Defender holds the freshly extracted binaries; no admin rights to add an exclusion). Fix: delete **every** `win-unpacked*` directory under `release/<version>/` (the `.tmp`, any stale target, any `_retryN` leftovers — moving only the `.tmp` does NOT help), sleep ~5 s, re-run `npx electron-builder`. The rename succeeds once Defender's scan settles (typically 1–2 attempts when the dirs are actually clean). **Do not check success by installer existence** — a stale installer from an earlier build survives failed attempts; compare `LastWriteTime` against a timestamp taken before the build started. Bare `npx electron-builder` also does NOT run `vite build` — use `npm run build` when renderer sources changed.
+- **electron-builder can fail with `EPERM` renaming `win-unpacked.tmp` → `win-unpacked`** (Defender holds the freshly extracted binaries; no admin rights to add an exclusion). A local patch in `node_modules/app-builder-lib/out/util/electronGet.js` retries that rename for up to 60 s — it is already applied on this machine; **`npm ci` reverts it** (re-apply: wrap the `fs.rename(tmpDir, dir)` after `fs.rm(dir, ...)` in a ~60×1 s retry loop). If the error still appears, delete **every** `win-unpacked*` directory under `release/<version>/` (the `.tmp`, any stale target, any `_retryN` leftovers — moving only the `.tmp` does NOT help), sleep ~5 s, re-run. **Do not check success by installer existence** — a stale installer from an earlier build survives failed attempts; compare `LastWriteTime` against a timestamp taken before the build started. Bare `npx electron-builder` also does NOT run `vite build` — use `npm run build` when renderer sources changed. A freshly rebuilt `Beacon Type.exe` may also be blocked once by Application Control on first launch; the `&` call operator succeeds where `Start-Process` reports the block.
 - **NTFS is case-insensitive:** `beacontype` and `BeaconType` are the same directory. Never `Remove-Item` a repo path with different casing — it happened once already.
 - **Git identity is not configured globally.** Commit with inline config: `git -c user.email=dev@local -c user.name=beacontype-dev commit ...`.
 - **Packaged and dev/e2e userData paths:** the packaged app uses `%APPDATA%\Beacon Type\`; non-packaged Electron (Playwright e2e, `npm run dev`) uses `%APPDATA%\Electron\` — both hold a `beacontype.db`. There is no `%APPDATA%\beacontype\`.
@@ -73,4 +73,4 @@ migrated v3→v4 in place too.
 
 ## Recommended build order
 
-Packaged skeleton → engine + tests → rule-based coach → experience layer → ML experiment → signed release.
+Packaged skeleton → engine + tests → rule-based coach → experience layer → ML experiment (done) → signed release.

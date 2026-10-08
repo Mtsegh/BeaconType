@@ -107,6 +107,12 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
             checked={settings.reducedMotion}
             onChange={(next) => onChange({ reducedMotion: next })}
           />
+          <Toggle
+            label="Adaptive Coach (shadow model)"
+            hint="Lets the local model steer lessons only when it is clearly safer. Rules stay the fallback."
+            checked={settings.adaptiveCoach}
+            onChange={(next) => onChange({ adaptiveCoach: next })}
+          />
         </div>
 
         <RadioRow<KeyboardMode>

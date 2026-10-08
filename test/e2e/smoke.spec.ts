@@ -31,11 +31,17 @@ test('lesson flow: choose -> type -> results -> saved', async () => {
     await expect(page.getByText("Today's goal")).toBeVisible()
     await expect(page.getByRole('button', { name: /punctuation/ })).toBeVisible()
 
+    // Phase-4 shadow comparison section renders regardless of training state.
+    const shadowRegion = page.getByRole('region', { name: 'Adaptive coach (shadow)' })
+    await expect(shadowRegion).toBeVisible()
+
     // Phase-3 experience layer: achievements + settings panel.
     await expect(page.getByText('Achievements')).toBeVisible()
     await expect(page.getByText('First transmission')).toBeVisible()
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await expect(page.getByText('Keyboard during lessons')).toBeVisible()
+    // Phase-4: adaptive coach is opt-in, default off.
+    await expect(page.getByText('Adaptive Coach (shadow model)')).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).click()
     await expect(page.getByText('Keyboard during lessons')).toBeHidden()
 
@@ -61,7 +67,14 @@ test('lesson flow: choose -> type -> results -> saved', async () => {
 
     // The coach recomputes after the save and offers a different lesson.
     await expect(page.getByText('Next mission')).toBeVisible({ timeout: 10000 })
-    await page.getByRole('button', { name: 'Start next lesson' }).click()
+
+    // Back on the select screen the shadow log has an entry for this
+    // session; its outcome stays pending until a later session follows it.
+    await page.getByRole('button', { name: 'Back to lessons' }).click()
+    await expect(shadowRegion).toBeVisible()
+    await expect(shadowRegion.getByText('pending').first()).toBeVisible()
+
+    await page.getByRole('button', { name: 'Start recommended lesson' }).click()
     await expect(page.locator('.passage')).toBeVisible()
   } finally {
     await app.close()

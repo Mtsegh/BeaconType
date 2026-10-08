@@ -13,6 +13,7 @@ describe('loadSettings', () => {
       { key: 'ui.reducedMotion', value: 'true' },
       { key: 'ui.keyboardMode', value: 'no-peek' },
       { key: 'ui.fontSize', value: 'lg' },
+      { key: 'ui.adaptiveCoach', value: 'true' },
     ]
     expect(loadSettings(rows)).toEqual({
       sound: false,
@@ -20,6 +21,7 @@ describe('loadSettings', () => {
       reducedMotion: true,
       keyboardMode: 'no-peek',
       fontSize: 'lg',
+      adaptiveCoach: true,
     })
   })
 
@@ -39,6 +41,7 @@ describe('loadSettings', () => {
       reducedMotion: true,
       keyboardMode: 'fade' as const,
       fontSize: 'sm' as const,
+      adaptiveCoach: true,
     }
     expect(loadSettings(settingEntries(settings))).toEqual(settings)
   })

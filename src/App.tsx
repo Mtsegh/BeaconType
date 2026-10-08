@@ -3,13 +3,15 @@ import { LessonSelect } from '@/components/LessonSelect'
 import { LessonPlayer } from '@/components/LessonPlayer'
 import { Onboarding } from '@/components/Onboarding'
 import { ResultsScreen } from '@/components/ResultsScreen'
+import { ML_VERSION } from '@/engine'
 import { recommendNext } from '@/lib/coach'
+import { analyzeShadow, logShadowFields } from '@/lib/shadow'
 import { DEFAULT_SETTINGS, ONBOARDED_KEY, SETTING_KEYS, isOnboarded, loadSettings } from '@/lib/settings'
 import { toPerKey, toSaveInput } from '@/lib/session'
 import type { UISettings } from '@/lib/settings'
 import type { NextMission } from '@/lib/coach'
 import type { SessionResult } from '@/lib/session'
-import type { CoachData, HealthInfo, LessonRow } from '../electron/shared/api'
+import type { CoachData, HealthInfo, LessonRow, ShadowLogRow } from '../electron/shared/api'
 import type { ErrorMode } from '@/engine'
 
 type Screen =
@@ -30,6 +32,7 @@ export default function App() {
   const [settings, setSettings] = useState<UISettings>(DEFAULT_SETTINGS)
   const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'error'>('saving')
   const [nextMission, setNextMission] = useState<NextMission | null>(null)
+  const [mlLog, setMlLog] = useState<ShadowLogRow[]>([])
 
   useEffect(() => {
     let active = true
@@ -38,13 +41,15 @@ export default function App() {
       window.btAPI.health(),
       window.btAPI.getCoach(),
       window.btAPI.getSettings(),
+      window.btAPI.getMlLog(),
     ])
-      .then(([lessonRows, info, coachData, settingRows]) => {
+      .then(([lessonRows, info, coachData, settingRows, shadowRows]) => {
         if (!active) return
         setLessons(lessonRows)
         setHealth(info)
         setCoach(coachData)
         setSettings(loadSettings(settingRows))
+        setMlLog(shadowRows)
         // Fresh accounts see onboarding; upgraded installs (with sessions)
         // are treated as onboarded even if the flag predates the column.
         const seen = isOnboarded(settingRows) || coachData.sessions.length > 0
@@ -79,12 +84,29 @@ export default function App() {
       setSaveStatus('saving')
       setNextMission(null)
       try {
-        await window.btAPI.saveSession(toSaveInput(result))
+        const saved = await window.btAPI.saveSession(toSaveInput(result))
         setSaveStatus('saved')
         // Fresh stats change the recommendation, so reload the coach data.
         const fresh = await window.btAPI.getCoach()
         setCoach(fresh)
-        setNextMission(recommendNext(lessons, fresh, result.lessonId))
+        const mission = recommendNext(lessons, fresh, result.lessonId)
+        setNextMission(mission)
+
+        // Shadow log: rules pick vs model pick, recorded next to each other.
+        // Never let bookkeeping failures surface as save failures.
+        try {
+          const analysis = analyzeShadow(lessons, fresh)
+          const fields = logShadowFields(analysis, lessons, mission?.lesson ?? null)
+          await window.btAPI.logShadow({
+            sessionId: saved.sessionId,
+            ruleLessonId: mission?.lesson.id ?? result.lessonId,
+            ...fields,
+            modelVersion: ML_VERSION,
+          })
+          setMlLog(await window.btAPI.getMlLog())
+        } catch {
+          // Shadow logging is best-effort; the session itself is saved.
+        }
       } catch {
         setSaveStatus('error')
       }
@@ -131,6 +153,7 @@ export default function App() {
             lessons={lessons}
             coach={coach}
             settings={settings}
+            mlLog={mlLog}
             onSelect={(lesson) => setScreen({ name: 'lesson', lesson })}
             onUpdateSetting={updateSettings}
           />

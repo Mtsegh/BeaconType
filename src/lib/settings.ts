@@ -13,6 +13,8 @@ export interface UISettings {
   reducedMotion: boolean
   keyboardMode: KeyboardMode
   fontSize: FontSize
+  /** Shadow-mode model may steer lessons when clearly safer (Phase 4). */
+  adaptiveCoach: boolean
 }
 
 export const DEFAULT_SETTINGS: UISettings = {
@@ -21,6 +23,7 @@ export const DEFAULT_SETTINGS: UISettings = {
   reducedMotion: false,
   keyboardMode: 'always',
   fontSize: 'md',
+  adaptiveCoach: false,
 }
 
 export const SETTING_KEYS: Record<keyof UISettings, string> = {
@@ -29,6 +32,7 @@ export const SETTING_KEYS: Record<keyof UISettings, string> = {
   reducedMotion: 'ui.reducedMotion',
   keyboardMode: 'ui.keyboardMode',
   fontSize: 'ui.fontSize',
+  adaptiveCoach: 'ui.adaptiveCoach',
 }
 
 export const ONBOARDED_KEY = 'ui.onboarded'
@@ -54,6 +58,7 @@ export function loadSettings(rows: SettingRow[]): UISettings {
     reducedMotion: parseBool(byKey.get(SETTING_KEYS.reducedMotion), DEFAULT_SETTINGS.reducedMotion),
     keyboardMode: parseEnum(byKey.get(SETTING_KEYS.keyboardMode), KEYBOARD_MODES, DEFAULT_SETTINGS.keyboardMode),
     fontSize: parseEnum(byKey.get(SETTING_KEYS.fontSize), FONT_SIZES, DEFAULT_SETTINGS.fontSize),
+    adaptiveCoach: parseBool(byKey.get(SETTING_KEYS.adaptiveCoach), DEFAULT_SETTINGS.adaptiveCoach),
   }
 }
 

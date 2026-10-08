@@ -99,6 +99,23 @@ export const MIGRATIONS: Migration[] = [
         ('diagnostic', 'diagnostic', 'fast hands follow a steady mind. jab the van, mix the cog, fix 45 keys. type slowly: 6 lamps, 7 zones, quiz 10 20 30. keep your wrists level.', '["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","0","1","2","3","4","5","6","7",".",",",":"]')`,
     ],
   },
+  {
+    version: 5,
+    name: 'ml-shadow-log',
+    sql: [
+      // One row per saved session: what each coach would have picked next to
+      // what actually happened. Outcome is resolved at read time from the
+      // FOLLOWING session, so nothing here can go stale.
+      `CREATE TABLE IF NOT EXISTS ml_shadow_log (
+        session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+        rule_lesson_id TEXT NOT NULL,
+        model_lesson_id TEXT,
+        model_pick_p REAL,
+        model_rule_p REAL,
+        model_version INTEGER NOT NULL
+      )`,
+    ],
+  },
 ]
 
 export function migrate(db: Database.Database, migrations: Migration[]): void {

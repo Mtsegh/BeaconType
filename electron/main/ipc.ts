@@ -7,11 +7,13 @@ import type {
   HealthInfo,
   KeyStatRow,
   LessonRow,
+  MlLogInput,
   RecentKeyError,
   SaveSessionInput,
   SaveSessionResult,
   SessionSummary,
   SettingRow,
+  ShadowLogRow,
 } from '../shared/api'
 
 const MAX_EVENTS = 50_000
@@ -51,6 +53,17 @@ const saveSessionSchema = z.object({
 const settingsSchema = z.object({
   key: z.string().min(1).max(64),
   value: z.string().max(1024),
+})
+
+const probability = z.number().min(0).max(1).nullable()
+
+const logShadowSchema = z.object({
+  sessionId: z.number().int().positive(),
+  ruleLessonId: z.string().min(1).max(64),
+  modelLessonId: z.string().min(1).max(64).nullable(),
+  modelPickP: probability,
+  modelRuleP: probability,
+  modelVersion: z.number().int().positive(),
 })
 
 export function registerIpc(db: Database.Database, dbPath: string): void {
@@ -257,5 +270,44 @@ export function registerIpc(db: Database.Database, dbPath: string): void {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
     ).run(input)
     return db.prepare('SELECT key, value FROM settings WHERE key = ?').get(input.key) as SettingRow
+  })
+
+  ipcMain.handle(IPC.logShadow, (_e, raw: unknown): void => {
+    const input = logShadowSchema.parse(raw) as MlLogInput
+    db.prepare(
+      `INSERT INTO ml_shadow_log
+         (session_id, rule_lesson_id, model_lesson_id, model_pick_p, model_rule_p, model_version)
+       VALUES (@sessionId, @ruleLessonId, @modelLessonId, @modelPickP, @modelRuleP, @modelVersion)
+       ON CONFLICT(session_id) DO UPDATE SET
+         rule_lesson_id = excluded.rule_lesson_id,
+         model_lesson_id = excluded.model_lesson_id,
+         model_pick_p = excluded.model_pick_p,
+         model_rule_p = excluded.model_rule_p,
+         model_version = excluded.model_version`,
+    ).run(input)
+  })
+
+  ipcMain.handle(IPC.getMlLog, (): ShadowLogRow[] => {
+    const rows = db
+      .prepare(
+        `SELECT session_id, rule_lesson_id, model_lesson_id, model_pick_p, model_rule_p, model_version
+         FROM ml_shadow_log ORDER BY session_id DESC LIMIT 200`,
+      )
+      .all() as Array<{
+      session_id: number
+      rule_lesson_id: string
+      model_lesson_id: string | null
+      model_pick_p: number | null
+      model_rule_p: number | null
+      model_version: number
+    }>
+    return rows.map((r) => ({
+      sessionId: r.session_id,
+      ruleLessonId: r.rule_lesson_id,
+      modelLessonId: r.model_lesson_id,
+      modelPickP: r.model_pick_p,
+      modelRuleP: r.model_rule_p,
+      modelVersion: r.model_version,
+    }))
   })
 }
