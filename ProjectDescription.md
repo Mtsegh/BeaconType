@@ -201,5 +201,3 @@ These are rough estimates, and I've widened them because the first version was o
 - Rules vs. shadow-model agreement (and, if you can run it, adaptive vs. fixed lessons)
 
 **Recommended order:** packaged skeleton → engine and tests → rule-based coach → experience layer → ML experiment → signed release.
-
-I can also turn this into a doc, or move straight to the typing engine code and database schema, whichever you'd rather do first.
