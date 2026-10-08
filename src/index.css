@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* ---- A11y color tokens (high-contrast dark palette, never color-only) ---- */
+:root {
+  --bg: #05070f;
+  --bg-raised: #0b1020;
+  --surface: #101828;
+  --border: #1d2b45;
+  --text: #e8eef9;
+  --muted: #93a0b8;
+  --accent: #38bdf8;
+  --accent-strong: #0ea5e9;
+  --ok: #4ade80;
+  --danger: #f87171;
+  --focus: #facc15;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Reduced-motion: flattened globally, animations/transitions opt back in. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---- Passage character states (managed imperatively via refs) ---- */
+.passage {
+  white-space: pre-wrap;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 1.35rem;
+  line-height: 1.9;
+  letter-spacing: 0.04em;
+}
+
+.char {
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 1px 1px;
+  transition: color 80ms ease, background-color 80ms ease;
+}
+
+.char-current {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.char-correct {
+  color: var(--ok);
+  background: transparent;
+  box-shadow: none;
+}
+
+.char-error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  text-decoration: underline wavy var(--danger);
+  box-shadow: none;
+}
+
+/* ---- Virtual keyboard keycaps ---- */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.4rem;
+  height: 2.4rem;
+  margin: 2px;
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 3px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.kbd-active {
+  border-color: var(--accent);
+  border-bottom-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  color: var(--text);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.kbd-wide {
+  min-width: 3.4rem;
+}
