@@ -1,0 +1,9 @@
+const Database = require('better-sqlite3')
+const path = process.env.APPDATA + '\\Beacon Type\\beacontype.db'
+const db = new Database(path, { readonly: true })
+const migrations = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)
+console.log('packaged DB migrations:', migrations.join(','))
+console.log('lessons:', db.prepare('SELECT COUNT(*) c FROM lessons').get().c)
+console.log('diagnostic:', db.prepare("SELECT COUNT(*) c FROM lessons WHERE id='diagnostic'").get().c === 1 ? 'present' : 'MISSING')
+console.log('settings:', db.prepare('SELECT key, value FROM settings').all().map((r) => `${r.key}=${r.value}`).join(' ') || '(none)')
+db.close()

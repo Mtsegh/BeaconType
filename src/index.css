@@ -43,6 +43,24 @@ body {
   }
 }
 
+/* Same flattening for the in-app Reduced motion setting. */
+html[data-motion='reduced'] *,
+html[data-motion='reduced'] *::before,
+html[data-motion='reduced'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Text size setting: rem-based sizing everywhere means one root override. */
+html[data-font='sm'] {
+  font-size: 14px;
+}
+html[data-font='lg'] {
+  font-size: 18.5px;
+}
+
 button:focus-visible,
 a:focus-visible,
 select:focus-visible,
@@ -115,4 +133,159 @@ select:focus-visible,
 
 .kbd-wide {
   min-width: 3.4rem;
+}
+
+/* Expected-next-key outline (separate from .kbd-active so both can apply). */
+.kbd-target {
+  border-color: color-mix(in srgb, var(--warn) 70%, var(--border));
+  color: var(--text);
+}
+
+/* Keyboard fade mode: dim while typing, never interactive anyway. */
+.kbd-raised,
+.kbd-dim {
+  transition: opacity 700ms ease;
+}
+.kbd-dim {
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+/* ---- Beacon orb (central ambient feedback during lessons) ---- */
+.beacon {
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 9999px;
+  flex: none;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      color-mix(in srgb, var(--accent) 92%, white) 0%,
+      var(--accent-strong) 48%,
+      color-mix(in srgb, var(--accent-strong) 28%, transparent) 78%,
+      transparent 100%
+    );
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 40px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.beacon-idle {
+  animation: beacon-breathe 4.5s ease-in-out infinite;
+}
+.beacon-well {
+  animation: beacon-glow 2.4s ease-in-out infinite;
+}
+.beacon-error {
+  animation: beacon-shudder 550ms ease-out 1;
+}
+
+@keyframes beacon-breathe {
+  0%,
+  100% {
+    transform: scale(0.95);
+    opacity: 0.62;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 0.92;
+  }
+}
+
+@keyframes beacon-glow {
+  0%,
+  100% {
+    opacity: 0.9;
+    box-shadow:
+      0 0 14px color-mix(in srgb, var(--accent) 50%, transparent),
+      0 0 34px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      0 0 26px color-mix(in srgb, var(--accent) 75%, transparent),
+      0 0 64px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+}
+
+@keyframes beacon-shudder {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(0.88);
+  }
+  65% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---- Finger guide (which finger presses the next key) ---- */
+.finger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.7rem;
+  height: 2.7rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg-raised);
+  color: var(--muted);
+  line-height: 1.05;
+  user-select: none;
+}
+
+.finger-home {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.finger-name {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.finger-thumb {
+  min-width: 3.6rem;
+}
+
+.finger-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-raised));
+  color: var(--text);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ---- Soft glass panels ---- */
+.glass {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+/* ---- Achievement chips (text + glyph, never color-only) ---- */
+.achievement {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.achievement-earned {
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--border));
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+
+.achievement-locked {
+  color: var(--muted);
 }

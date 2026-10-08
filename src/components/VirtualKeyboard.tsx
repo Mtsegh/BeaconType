@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { codeForChar } from '@/lib/fingers'
 
 interface KeyDef {
   code: string
@@ -77,7 +78,11 @@ const ROWS: KeyDef[][] = [
 
 // Physical-key highlighting uses event.code (layout-aware) while scoring uses
 // event.key (character-accurate). See src/engine/input.ts.
-export function VirtualKeyboard() {
+//
+// `targetChar` outlines the expected next key (char → code, so non-QWERTY
+// layouts still outline a physical key that exists); `dimmed` implements the
+// fade keyboard mode (visual only — pointer events are off in CSS).
+export function VirtualKeyboard({ targetChar, dimmed }: { targetChar?: string | null; dimmed?: boolean }) {
   const [activeCode, setActiveCode] = useState<string | null>(null)
 
   useEffect(() => {
@@ -93,18 +98,26 @@ export function VirtualKeyboard() {
     }
   }, [])
 
+  const targetCode = targetChar ? codeForChar(targetChar) : null
+
   return (
     <div
       role="img"
-      aria-label="Virtual keyboard showing the physical key you pressed"
-      className="flex flex-col items-center gap-0.5"
+      aria-label={
+        targetChar
+          ? 'Virtual keyboard. Physical key pressed is highlighted, next key to type is outlined.'
+          : 'Virtual keyboard showing the physical key you pressed'
+      }
+      className={`flex flex-col items-center gap-0.5 ${dimmed ? 'kbd-dim' : 'kbd-raised'}`}
     >
       {ROWS.map((row, i) => (
         <div key={i} className="flex items-center justify-center">
           {row.map((k) => (
             <span
               key={k.code}
-              className={`kbd${k.wide ? ' kbd-wide' : ''}${activeCode === k.code ? ' kbd-active' : ''}`}
+              className={`kbd${k.wide ? ' kbd-wide' : ''}${activeCode === k.code ? ' kbd-active' : ''}${
+                targetCode === k.code ? ' kbd-target' : ''
+              }`}
             >
               {k.label}
             </span>

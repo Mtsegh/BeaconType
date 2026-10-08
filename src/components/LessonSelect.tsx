@@ -1,15 +1,22 @@
+import { useState } from 'react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { computeWeakness, recommend } from '@/engine'
+import { deriveAchievements } from '@/lib/achievements'
 import { toSnapshot } from '@/lib/coach'
+import type { UISettings } from '@/lib/settings'
 import type { CoachData, LessonRow } from '../../electron/shared/api'
+import { SettingsPanel } from './SettingsPanel'
 
 interface LessonSelectProps {
   lessons: LessonRow[]
   coach: CoachData
+  settings: UISettings
   onSelect: (lesson: LessonRow) => void
+  onUpdateSetting: (patch: Partial<UISettings>) => void
 }
 
-export function LessonSelect({ lessons, coach, onSelect }: LessonSelectProps) {
+export function LessonSelect({ lessons, coach, settings, onSelect, onUpdateSetting }: LessonSelectProps) {
+  const [showSettings, setShowSettings] = useState(false)
   const snapshot = toSnapshot(coach)
   const recommendation = recommend(lessons, snapshot)
   const weaknesses = computeWeakness(
@@ -33,9 +40,31 @@ export function LessonSelect({ lessons, coach, onSelect }: LessonSelectProps) {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Beacon Type</h1>
-        <p className="text-sm text-[var(--muted)]">Pick a transmission to practice. Use the tab key to navigate.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-bold tracking-tight">Beacon Type</h1>
+            <p className="text-sm text-[var(--muted)]">
+              Pick a transmission to practice. Use the tab key to navigate.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSettings((v) => !v)}
+            aria-expanded={showSettings}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--muted)] ring-1 ring-[var(--border)] transition-colors hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+          >
+            Settings
+          </button>
+        </div>
       </header>
+
+      {showSettings && (
+        <SettingsPanel
+          settings={settings}
+          onChange={onUpdateSetting}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
@@ -163,6 +192,28 @@ export function LessonSelect({ lessons, coach, onSelect }: LessonSelectProps) {
                 Complete two sessions to see your trend.
               </p>
             )}
+          </section>
+          <section className="rounded-xl bg-[var(--surface)] p-5 ring-1 ring-[var(--border)]" aria-label="Achievements">
+            <h2 className="text-sm font-semibold">Achievements</h2>
+            <ul className="mt-3 flex flex-col gap-2">
+              {deriveAchievements(coach.sessions).map((a) => (
+                <li
+                  key={a.id}
+                  className={`achievement ${a.earned ? 'achievement-earned' : 'achievement-locked'}`}
+                >
+                  <span aria-hidden="true" className="font-bold">
+                    {a.earned ? '★' : '☆'}
+                  </span>
+                  <span>
+                    <span className="block font-semibold">{a.title}</span>
+                    <span className="block text-[0.7rem] text-[var(--muted)]">{a.description}</span>
+                  </span>
+                  <span className="ml-auto self-center text-[0.6rem] font-semibold uppercase tracking-wide">
+                    {a.earned ? 'earned' : 'locked'}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </section>
         </aside>
       </div>

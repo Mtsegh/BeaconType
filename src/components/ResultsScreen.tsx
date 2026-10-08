@@ -1,17 +1,30 @@
+import { useEffect } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { SessionResult } from '@/lib/session'
 import type { NextMission } from '@/lib/coach'
-import type { LessonRow } from '../../electron/shared/api'
+import type { UISettings } from '@/lib/settings'
+import type { CoachData, LessonRow } from '../../electron/shared/api'
+import { Constellation } from './Constellation'
 
 interface ResultsScreenProps {
   result: SessionResult
   saveStatus: 'saving' | 'saved' | 'error'
   next: NextMission | null
+  coach: CoachData | null
+  settings: UISettings
   onDone: () => void
   onStartNext: (lesson: LessonRow) => void
 }
 
-export function ResultsScreen({ result, saveStatus, next, onDone, onStartNext }: ResultsScreenProps) {
+export function ResultsScreen({
+  result,
+  saveStatus,
+  next,
+  coach,
+  settings,
+  onDone,
+  onStartNext,
+}: ResultsScreenProps) {
   const m = result.metrics
   const chartData = result.perKey
     .filter((k) => k.attempts > 0)
@@ -22,6 +35,19 @@ export function ResultsScreen({ result, saveStatus, next, onDone, onStartNext }:
     .filter((k) => k.errors > 0)
     .slice(0, 3)
     .map((k) => `"${k.key}" (${k.errors} error${k.errors === 1 ? '' : 's'})`)
+
+  // Spoken summary (optional, feature-detected) after the session persists.
+  useEffect(() => {
+    if (!settings.voice || saveStatus !== 'saved') return
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    const line = `Session complete. ${result.metrics.netWpm.toFixed(0)} words per minute, ${(
+      result.metrics.accuracy * 100
+    ).toFixed(0)} percent accuracy.`
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(line)
+    window.speechSynthesis.speak(utterance)
+    return () => window.speechSynthesis.cancel()
+  }, [settings.voice, saveStatus, result])
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-8">
@@ -74,6 +100,8 @@ export function ResultsScreen({ result, saveStatus, next, onDone, onStartNext }:
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {coach && <Constellation coach={coach} />}
 
       {next && (
         <section className="rounded-xl bg-[var(--surface)] p-5 ring-1 ring-[var(--accent)]">

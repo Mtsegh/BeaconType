@@ -89,6 +89,16 @@ export const MIGRATIONS: Migration[] = [
         ('passage-hands', 'passages', 'keep your wrists level and your eyes on the line. speed arrives later, on its own, when the hands stop thinking about the keys.', '["a","b","c","d","e","f","g","h","i","k","l","m","n","o","p","r","s","t","u","v","w","x","y"]')`,
     ],
   },
+  {
+    version: 4,
+    name: 'diagnostic-lesson',
+    sql: [
+      // ~140 chars: every letter a-z, digits 0-7, and basic punctuation in
+      // roughly one minute — used by first-run onboarding.
+      `INSERT OR IGNORE INTO lessons (id, category, content, target_keys) VALUES
+        ('diagnostic', 'diagnostic', 'fast hands follow a steady mind. jab the van, mix the cog, fix 45 keys. type slowly: 6 lamps, 7 zones, quiz 10 20 30. keep your wrists level.', '["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","0","1","2","3","4","5","6","7",".",",",":"]')`,
+    ],
+  },
 ]
 
 export function migrate(db: Database.Database, migrations: Migration[]): void {
