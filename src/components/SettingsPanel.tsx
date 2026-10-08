@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { FontSize, KeyboardMode, UISettings } from '@/lib/settings'
 
 interface SettingsPanelProps {
@@ -68,6 +69,48 @@ function RadioRow<T extends string>({
 
 export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps) {
   const supportsVoice = typeof window !== 'undefined' && 'speechSynthesis' in window
+  const [dataStatus, setDataStatus] = useState<string | null>(null)
+  const [feedbackStatus, setFeedbackStatus] = useState<string | null>(null)
+
+  const handleExport = async () => {
+    setDataStatus(null)
+    const result = await window.btAPI.exportBackup()
+    if (result.ok) setDataStatus(`Backup saved to ${result.path}`)
+    else if (!result.canceled) setDataStatus(`Export failed: ${result.error}`)
+  }
+
+  const handleImport = async () => {
+    setDataStatus(null)
+    const confirmed = window.confirm(
+      'Restoring a backup replaces ALL current progress, settings and stats with the file contents. Continue?',
+    )
+    if (!confirmed) return
+    const result = await window.btAPI.importBackup()
+    if (result.ok) {
+      setDataStatus('Backup restored. Reloading…')
+      window.location.reload()
+    } else if (!result.canceled) {
+      setDataStatus(`Restore failed: ${result.error}`)
+    }
+  }
+
+  const handleCopyDiagnostics = async () => {
+    setFeedbackStatus(null)
+    try {
+      const [health, coach] = await Promise.all([window.btAPI.health(), window.btAPI.getCoach()])
+      const text = [
+        `Beacon Type ${health.appVersion}`,
+        `schema v${health.schemaVersion}`,
+        `sessions: ${coach.sessions.length}`,
+        `platform: ${navigator.platform}`,
+        `db: ${health.dbPath}`,
+      ].join('\n')
+      await navigator.clipboard.writeText(text)
+      setFeedbackStatus('Diagnostics copied — paste them into your message.')
+    } catch {
+      setFeedbackStatus('Could not access the clipboard.')
+    }
+  }
 
   return (
     <section
@@ -136,6 +179,55 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
             { value: 'lg', label: 'Large' },
           ]}
         />
+
+        <div className="py-3">
+          <h3 className="text-sm font-medium">Your data</h3>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            Everything is stored on this computer. Export a backup before switching machines.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleExport}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-[var(--border)] transition-colors hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+            >
+              Export backup…
+            </button>
+            <button
+              type="button"
+              onClick={handleImport}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-[var(--border)] transition-colors hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+            >
+              Import backup…
+            </button>
+          </div>
+          {dataStatus && (
+            <p className="mt-2 text-xs text-[var(--muted)]" role="status">
+              {dataStatus}
+            </p>
+          )}
+        </div>
+
+        <div className="py-3">
+          <h3 className="text-sm font-medium">Feedback</h3>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            Copy diagnostics to include when you report a problem or share an idea.
+          </p>
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={handleCopyDiagnostics}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-[var(--border)] transition-colors hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]"
+            >
+              Copy diagnostics
+            </button>
+          </div>
+          {feedbackStatus && (
+            <p className="mt-2 text-xs text-[var(--muted)]" role="status">
+              {feedbackStatus}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   )

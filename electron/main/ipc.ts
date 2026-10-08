@@ -1,8 +1,12 @@
 import type Database from 'better-sqlite3'
+import { promises as fs } from 'node:fs'
 import { z } from 'zod'
-import { ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { IPC } from '../shared/api'
+import { parseBackup, serializeBackup } from '../shared/backup'
+import type { BackupFile } from '../shared/backup'
 import type {
+  BackupResult,
   CoachData,
   HealthInfo,
   KeyStatRow,
@@ -71,7 +75,7 @@ export function registerIpc(db: Database.Database, dbPath: string): void {
     const row = db
       .prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1')
       .get() as { version: number } | undefined
-    return { dbPath, schemaVersion: row?.version ?? 0 }
+    return { dbPath, schemaVersion: row?.version ?? 0, appVersion: app.getVersion() }
   })
 
   ipcMain.handle(IPC.listLessons, (): LessonRow[] => {
@@ -309,5 +313,115 @@ export function registerIpc(db: Database.Database, dbPath: string): void {
       modelRuleP: r.model_rule_p,
       modelVersion: r.model_version,
     }))
+  })
+
+  ipcMain.handle(IPC.exportBackup, async (): Promise<BackupResult> => {
+    try {
+      const { canceled, filePath } = await dialog.showSaveDialog(BrowserWindow.getFocusedWindow() ?? undefined, {
+        title: 'Export Beacon Type backup',
+        defaultPath: `beacontype-backup-${new Date().toISOString().slice(0, 10)}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (canceled || filePath == null) return { ok: false, canceled: true }
+
+      const schemaVersion = (
+        db.prepare('SELECT MAX(version) v FROM schema_migrations').get() as { v: number | null }
+      ).v ?? 0
+      const backup: BackupFile = {
+        format: 'beacontype-backup',
+        backupVersion: 1,
+        schemaVersion,
+        exportedAt: new Date().toISOString(),
+        settings: db.prepare('SELECT key, value FROM settings ORDER BY key').all() as BackupFile['settings'],
+        sessions: db
+          .prepare(
+            `SELECT id, started_at, lesson_id, mode, net_wpm, raw_wpm, accuracy, duration_ms, formula_version
+             FROM sessions ORDER BY id`,
+          )
+          .all() as BackupFile['sessions'],
+        keystroke_events: db
+          .prepare(
+            'SELECT session_id, idx, expected, typed, t_ms, correct FROM keystroke_events ORDER BY session_id, idx',
+          )
+          .all() as BackupFile['keystroke_events'],
+        key_stats: db
+          .prepare(
+            'SELECT key, attempts, errors, median_interval_ms, streak, updated_at FROM key_stats ORDER BY key',
+          )
+          .all() as BackupFile['key_stats'],
+        ml_shadow_log: db
+          .prepare(
+            `SELECT session_id, rule_lesson_id, model_lesson_id, model_pick_p, model_rule_p, model_version
+             FROM ml_shadow_log ORDER BY session_id`,
+          )
+          .all() as BackupFile['ml_shadow_log'],
+      }
+      await fs.writeFile(filePath, serializeBackup(backup), 'utf8')
+      return { ok: true, path: filePath }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC.importBackup, async (): Promise<BackupResult> => {
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow() ?? undefined, {
+        title: 'Restore Beacon Type backup',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      })
+      if (canceled || filePaths.length === 0) return { ok: false, canceled: true }
+
+      const backup = parseBackup(await fs.readFile(filePaths[0], 'utf8'))
+
+      const restore = db.transaction((b: BackupFile) => {
+        // Wipe user-owned tables, then refill from the backup. Lessons and
+        // user_profile stay untouched - they are app-managed.
+        db.prepare('DELETE FROM keystroke_events').run()
+        db.prepare('DELETE FROM key_stats').run()
+        db.prepare('DELETE FROM ml_shadow_log').run()
+        db.prepare('DELETE FROM sessions').run()
+        db.prepare('DELETE FROM settings').run()
+
+        const insertSession = db.prepare(
+          `INSERT INTO sessions (id, started_at, lesson_id, mode, net_wpm, raw_wpm, accuracy, duration_ms, formula_version)
+           VALUES (@id, @started_at, @lesson_id, @mode, @net_wpm, @raw_wpm, @accuracy, @duration_ms, @formula_version)`,
+        )
+        for (const s of b.sessions) insertSession.run(s)
+
+        const insertEvent = db.prepare(
+          `INSERT INTO keystroke_events (session_id, idx, expected, typed, t_ms, correct)
+           VALUES (@session_id, @idx, @expected, @typed, @t_ms, @correct)`,
+        )
+        for (const e of b.keystroke_events) insertEvent.run(e)
+
+        const insertStat = db.prepare(
+          `INSERT INTO key_stats (key, attempts, errors, median_interval_ms, streak, updated_at)
+           VALUES (@key, @attempts, @errors, @median_interval_ms, @streak, @updated_at)`,
+        )
+        for (const k of b.key_stats) insertStat.run(k)
+
+        const insertShadow = db.prepare(
+          `INSERT INTO ml_shadow_log (session_id, rule_lesson_id, model_lesson_id, model_pick_p, model_rule_p, model_version)
+           VALUES (@session_id, @rule_lesson_id, @model_lesson_id, @model_pick_p, @model_rule_p, @model_version)`,
+        )
+        for (const s of b.ml_shadow_log) insertShadow.run(s)
+
+        const insertSetting = db.prepare('INSERT INTO settings (key, value) VALUES (@key, @value)')
+        for (const s of b.settings) insertSetting.run(s)
+
+        // Keep AUTOINCREMENT's counter consistent with the restored ids.
+        const maxId = (db.prepare('SELECT COALESCE(MAX(id), 0) m FROM sessions').get() as { m: number }).m
+        db.prepare("DELETE FROM sqlite_sequence WHERE name = 'sessions'").run()
+        if (maxId > 0) {
+          db.prepare("INSERT INTO sqlite_sequence (name, seq) VALUES ('sessions', ?)").run(maxId)
+        }
+      })
+
+      restore(backup)
+      return { ok: true, path: filePaths[0] }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 }

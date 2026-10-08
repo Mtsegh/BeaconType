@@ -116,6 +116,20 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 6,
+    name: 'lesson-content-honesty',
+    sql: [
+      // A few lessons listed target_keys their content never used (f, b, c,
+      // m, x, q, z, comma). Extend the texts instead of shrinking the
+      // promises - the honesty test in migrations.test.ts guards this forever.
+      `UPDATE lessons SET content = content || ' quiz jazz vex fox quick jumps' WHERE id = 'drills'`,
+      `UPDATE lessons SET content = content || ' can will' WHERE id = 'common-words'`,
+      `UPDATE lessons SET content = 'the beacon turns once every hour, sweeping the dark water with a slow white arm as the fog drifts by. boats keep their distance and the gulls never settle on the tower.' WHERE id = 'passage-lighthouse'`,
+      `UPDATE lessons SET content = 'keep your wrists level and your eyes on the line. the fingers curve, the back is straight, and each hand stays calm; the fix is slow, and speed arrives later on its own.' WHERE id = 'passage-hands'`,
+      `UPDATE lessons SET content = 'fast hands follow a steady mind. jab the van, mix the cog, fix 45 keys, type slowly: 6 lamps, 7 zones, quiz 10 20 30. keep your wrists level.' WHERE id = 'diagnostic'`,
+    ],
+  },
 ]
 
 export function migrate(db: Database.Database, migrations: Migration[]): void {

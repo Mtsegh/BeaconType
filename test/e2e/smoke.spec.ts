@@ -42,6 +42,10 @@ test('lesson flow: choose -> type -> results -> saved', async () => {
     await expect(page.getByText('Keyboard during lessons')).toBeVisible()
     // Phase-4: adaptive coach is opt-in, default off.
     await expect(page.getByText('Adaptive Coach (shadow model)')).toBeVisible()
+    // Phase-5: backup export/import and diagnostics live in the panel.
+    await expect(page.getByRole('button', { name: 'Export backup…' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Import backup…' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Copy diagnostics' })).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).click()
     await expect(page.getByText('Keyboard during lessons')).toBeHidden()
 

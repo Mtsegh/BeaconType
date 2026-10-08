@@ -16,7 +16,10 @@
         "arch": ["x64"]
       }
     ],
-    "artifactName": "${productName}_${version}.${ext}"
+    "artifactName": "${productName}_${version}.${ext}",
+    "signtoolOptions": {
+      "timeStampServer": "http://timestamp.digicert.com"
+    }
   },
   "nsis": {
     "oneClick": false,

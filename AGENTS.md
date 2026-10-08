@@ -3,7 +3,7 @@
 ## Repo status
 
 - The single source of truth for *what* to build is `ProjectDescription.md` — read it fully before writing code.
-- The scaffold has landed: Electron + Vite (`vite-plugin-electron`) + React + TypeScript + Tailwind v4 + `better-sqlite3`. Phase 0 (packaged skeleton), Phase 1 (engine + one lesson + results), Phase 2 (rule-based adaptive coach, lesson categories, progress/daily goal), Phase 3 (experience layer: onboarding + diagnostic, settings, beacon, finger guide, keyboard modes, sounds, achievements, constellation) and Phase 4 (ML shadow mode: local logistic regression, shadow logging, adaptive-coach toggle) are implemented and verified.
+- The scaffold has landed: Electron + Vite (`vite-plugin-electron`) + React + TypeScript + Tailwind v4 + `better-sqlite3`. Phase 0 (packaged skeleton), Phase 1 (engine + one lesson + results), Phase 2 (rule-based adaptive coach, lesson categories, progress/daily goal), Phase 3 (experience layer: onboarding + diagnostic, settings, beacon, finger guide, keyboard modes, sounds, achievements, constellation), Phase 4 (ML shadow mode: local logistic regression, shadow logging, adaptive-coach toggle) and Phase 5 (release work: backup export/import, diagnostics, migration tests, signing config) are implemented and verified. Only distribution/signing decisions remain.
 - Package manager: **npm only** (no pnpm/yarn). `package-lock.json` is committed.
 
 ## Verified commands (run in this order before any commit)
@@ -11,19 +11,20 @@
 ```sh
 npm run typecheck   # tsc --noEmit for both tsconfig.json (web) and tsconfig.node.json (electron/configs)
 npm run lint        # eslint electron src --max-warnings 0 (use `npx eslint .` for repo-wide, e2e included)
-npm test            # vitest run (80 tests: 13 metrics/input + 21 coach + 24 lib + 22 ml)
+npm test            # vitest run (94 tests: 13 metrics/input + 21 coach + 24 lib + 22 ml + 8 backup + 6 migrations)
 npx playwright test # e2e smoke (needs `npm run pretest` first if dist-electron is stale)
 npm run build       # vite build + electron-builder NSIS installer -> release/0.1.0/
 ```
 
-All five were green as of the Phase 4 gate (2026-10-08). The packaged gate:
+All five were green as of the Phase 5 gate (2026-10-08). The packaged gate:
 launch `release/0.1.0/win-unpacked/Beacon Type.exe` (it must stay alive — that
 proves `better-sqlite3` loads), then run `node test/check-packaged-db.cjs` and
-confirm `%APPDATA%\Beacon Type\beacontype.db` reaches `schema_migrations` v5
+confirm `%APPDATA%\Beacon Type\beacontype.db` reaches `schema_migrations` v6
 (`initial-schema`, `seed-lessons`, `coach-lessons-and-profile`,
-`diagnostic-lesson`, `ml-shadow-log`) with 10 lessons including `diagnostic`
-and the `ml_shadow_log` table present. An existing v4 database must upgrade in
-place. The e2e DB (`%APPDATA%\Electron\beacontype.db`) migrates in place too.
+`diagnostic-lesson`, `ml-shadow-log`, `lesson-content-honesty`) with 10 lessons
+including `diagnostic` and the `ml_shadow_log` table present. An existing
+older database must upgrade in place. The e2e DB
+(`%APPDATA%\Electron\beacontype.db`) migrates in place too.
 
 ## Locked decisions (do not re-litigate)
 
@@ -53,7 +54,11 @@ place. The e2e DB (`%APPDATA%\Electron\beacontype.db`) migrates in place too.
 - **Keyboard modes** (settings `keyboardMode`): `always` / `fade` (dims after 6 s) / `no-peek` (keyboard not rendered). The `HandGuide` stays visible in *all* modes and shows the **finger, not the key position** — that is why it stays useful in no-peek mode. Expected-key outline and pressed-key highlight both use physical `event.code`-style codes (`codeForChar()` in `src/lib/fingers.ts`, unit-tested).
 - **Sounds** live in `src/lib/audio.ts` (Web Audio, no asset files, lazy `AudioContext` created on first keydown). Callers gate on the `sound` setting; the module never reads settings itself.
 - **Achievements and constellation are derived, never persisted** (`src/lib/achievements.ts`, `Constellation.tsx` uses `computeWeakness`) — they cannot drift from the data or be lost. Constellation layout is a deterministic golden-angle spiral over a–z.
-- **Migration v4 added the `diagnostic` lesson** (10 lessons total, `INSERT OR IGNORE`). Keep `target_keys` honest — list only characters that actually appear in the content.
+- **Migration v4 added the `diagnostic` lesson** (10 lessons total, `INSERT OR IGNORE`). Keep `target_keys` honest — list only characters that actually appear in the content. **Migration v6 (`lesson-content-honesty`) fixed lessons that broke this rule** (drills/common-words/passages/diagnostic were missing letters and a comma their target_keys promised); the test `keeps every lesson target_keys honest` in `electron/main/migrations.test.ts` enforces this forever — never add a target key the content does not use, and never shrink a lesson's promise without updating its text via a new migration.
+- **Migration tests live next to the code** (`electron/main/migrations.test.ts`, in-memory `better-sqlite3`): fresh apply v1→latest, in-place upgrade of an older DB with data intact, idempotency, and the target_keys honesty check. `vitest.config.ts` includes `electron/**` for these plus the backup-format tests.
+- **Backup export/import (Phase 5):** the format is defined in `electron/shared/backup.ts` (dependency-free, hand-rolled validation — do not add zod there; the sandboxed preload bundles `electron/shared`). Export/import handlers in `electron/main/ipc.ts` use native save/open dialogs; **restore REPLACES** the user-owned tables (`sessions`, `keystroke_events`, `key_stats`, `settings`, `ml_shadow_log`) in one transaction and resets the `sessions` AUTOINCREMENT counter; `lessons` and `user_profile` are app-managed and stay untouched. Inserts use explicit column lists from the validated rows — never interpolate raw backup keys into SQL. The renderer only shows status and calls `location.reload()` after a successful restore.
+- **Feedback loop is diagnostics-for-now** (Settings → "Copy diagnostics" assembles version/schema/session-count/db-path). When a real channel exists, wire it there — do not invent an address in code.
+- **Code signing is env-driven, no config needed:** set `CSC_LINK` (path/URL to the .pfx) and `CSC_KEY_PASSWORD` when running `npm run build`; `win.signtoolOptions.timeStampServer` is already set in `electron-builder.json` (note: flat `timestampUrl`/`timeStampServer` under `win` are rejected by the electron-builder 26 schema — they must sit inside `signtoolOptions`). The current installer is self-signed by electron-builder's dev fallback until a real certificate arrives.
 - **e2e handles the onboarding branch** (fresh DB → "Skip for now"); to re-test that path, move `%APPDATA%\Electron\beacontype.db` (plus `-wal`/`-shm`) aside for one run, then restore.
 - **ML model (Phase 4) stays shadow-mode; rules remain the fallback.** The engine lives in `src/engine/ml.ts` (pure TS, same purity rules as the coach engine; `ML_CONFIG` holds every tunable: target accuracy 0.95, min 10 examples, target success 0.75, acceptance/margin gates, 600 epochs). Training examples come from *consecutive session pairs* (features of session i predict whether session i+1 hit the accuracy target — never a session predicting itself). `trainModel` is deterministic full-batch logistic regression with z-score normalization and returns `null` below the minimum sample count. Renderer glue is `src/lib/shadow.ts`; `App.finish()` writes one `ml_shadow_log` row per saved session (best-effort — failures never surface as save failures) via `logShadow`, and the LessonSelect "Adaptive coach (shadow)" section renders the comparison (agreement, Brier, last 5 rows, pending outcomes). The `ui.adaptiveCoach` toggle (default **false**) only lets the model steer the Recommended card when `resolveDriver` says the model's pick is clearly safer (`p ≥ 0.7` and `≥ 0.05` above the rule pick's prediction); the chosen lesson id, its `p`, and the rule pick's `p` are what get logged, and the *outcome* is always resolved at read time from the following session. Do not persist model weights or derived outcomes — both are rebuildable from sessions + log rows.
 
@@ -73,4 +78,4 @@ place. The e2e DB (`%APPDATA%\Electron\beacontype.db`) migrates in place too.
 
 ## Recommended build order
 
-Packaged skeleton → engine + tests → rule-based coach → experience layer → ML experiment (done) → signed release.
+Packaged skeleton → engine + tests → rule-based coach → experience layer → ML experiment → release features (done; code signing and distribution still pending user decisions).

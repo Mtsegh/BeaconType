@@ -85,6 +85,7 @@ export interface CoachData {
 export interface HealthInfo {
   dbPath: string
   schemaVersion: number
+  appVersion: string
 }
 
 export interface MlLogInput {
@@ -105,6 +106,11 @@ export interface ShadowLogRow {
   modelVersion: number
 }
 
+export type BackupResult =
+  | { ok: true; path: string }
+  | { ok: false; canceled: true }
+  | { ok: false; canceled?: false; error: string }
+
 export interface SaveSessionResult {
   sessionId: number
   insertedEvents: number
@@ -120,6 +126,8 @@ export const IPC = {
   setSetting: 'bt:set-setting',
   logShadow: 'bt:log-shadow',
   getMlLog: 'bt:get-ml-log',
+  exportBackup: 'bt:export-backup',
+  importBackup: 'bt:import-backup',
 } as const
 
 export interface BTAPI {
@@ -132,4 +140,6 @@ export interface BTAPI {
   setSetting(input: SettingsInput): Promise<SettingRow>
   logShadow(input: MlLogInput): Promise<void>
   getMlLog(): Promise<ShadowLogRow[]>
+  exportBackup(): Promise<BackupResult>
+  importBackup(): Promise<BackupResult>
 }

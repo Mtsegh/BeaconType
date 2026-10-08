@@ -15,6 +15,8 @@ const btAPI: BTAPI = {
   setSetting: (input) => ipcRenderer.invoke(IPC.setSetting, input),
   logShadow: (input) => ipcRenderer.invoke(IPC.logShadow, input),
   getMlLog: () => ipcRenderer.invoke(IPC.getMlLog),
+  exportBackup: () => ipcRenderer.invoke(IPC.exportBackup),
+  importBackup: () => ipcRenderer.invoke(IPC.importBackup),
 }
 
 contextBridge.exposeInMainWorld('btAPI', btAPI)
